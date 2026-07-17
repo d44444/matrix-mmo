@@ -15,7 +15,7 @@
 </head>
 <body>
 
-    <!-- Left: Player Stats & Guild -->
+    <!-- Left: Player Stats -->
     <div class="panel">
         <h2 id="p-name">Loading...</h2>
         <p>Shards: <span id="p-shards">0</span></p>
@@ -23,9 +23,6 @@
         
         <h3>Inventory</h3>
         <div id="p-inv" style="font-size: 0.8rem; margin-bottom: 15px;"></div>
-
-        <h3>Guild Action</h3>
-        <button class="btn" onclick="donate()">Donate 50 Shards to Vault</button>
     </div>
 
     <!-- Center: Raid Combat -->
@@ -40,36 +37,37 @@
         </div>
     </div>
 
-    <!-- Right: Chat & Trade Logs -->
+    <!-- Right: Chat & Logs -->
     <div class="panel">
         <h2>Global Network</h2>
         <div class="chat-box" id="chat"></div>
         <input type="text" id="chat-input" placeholder="Broadcast message..." style="width: 100%; padding: 5px;">
-        
-        <div id="trade-zone" style="margin-top: 20px; display: none; background: #2d3748; padding: 10px;">
-            <h3 style="margin:0; font-size:1rem; color:#4a90e2">Trade Request</h3>
-            <p id="trade-desc" style="font-size: 0.8rem;"></p>
-            <button class="btn" onclick="acceptTrade()" style="background: #48bb78">Offer 1st Item & Lock</button>
-        </div>
     </div>
 
     <script>
         const socket = io();
         let myState = {};
-        let activeTradeId = null;
+
+        // Ask the user for their name as soon as they open the page
+        const myUsername = prompt("Enter your Hacker Alias:");
+        
+        // If they entered a name, log them in. Otherwise, warn them.
+        if (myUsername) {
+            socket.emit('login', myUsername);
+        } else {
+            alert("System Error: You must enter a name to play. Please refresh the page.");
+        }
 
         // --- Core Updates ---
         socket.on('stateUpdate', (state) => {
             myState = state;
-            document.getElementById('p-name').innerText = state.name;
+            document.getElementById('p-name').innerText = state.username;
             document.getElementById('p-shards').innerText = state.shards;
             document.getElementById('p-hp').innerText = state.hp;
             
             // Render Inventory
             document.getElementById('p-inv').innerHTML = state.inventory.map(i => 
-                `<div>- ${i.name} 
-                    <button onclick="proposeTrade(prompt('Enter Target Player ID'), '${i.uid}')" style="font-size:10px; background:#4a90e2; border:none; color:white;">Trade</button>
-                </div>`
+                `<div>- ${i.name}</div>`
             ).join('');
         });
 
@@ -99,26 +97,6 @@
             chat.innerHTML += `<div><strong style="color:#ff4500">[${sender}]</strong> ${msg}</div>`;
             chat.scrollTop = chat.scrollHeight;
         });
-
-        function donate() { socket.emit('donateToGuild', 50); }
-
-        // --- Trading ---
-        function proposeTrade(targetId, myItemUid) {
-            if(targetId) socket.emit('startTrade', targetId, myItemUid);
-        }
-
-        socket.on('tradeRequest', (tradeId, senderName, item) => {
-            activeTradeId = tradeId;
-            document.getElementById('trade-zone').style.display = 'block';
-            document.getElementById('trade-desc').innerText = `${senderName} offers: ${item.name}.`;
-        });
-
-        function acceptTrade() {
-            // Hardcoded to offer the first item in inventory for prototype speed
-            socket.emit('offerTradeItem', activeTradeId, myState.inventory[0].uid);
-            socket.emit('lockTrade', activeTradeId);
-            document.getElementById('trade-zone').innerHTML = "<p>Trade locked. Waiting for partner...</p>";
-        }
     </script>
 </body>
 </html>
