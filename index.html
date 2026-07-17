@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Matrix MMO Dashboard</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { background: #0a0b0d; color: #e6edf3; font-family: monospace; display: flex; gap: 20px; padding: 20px; }
+        .panel { background: #14171c; border: 1px solid #30363d; padding: 15px; border-radius: 6px; width: 300px; }
+        .btn { background: #ff4500; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 4px; width: 100%; margin-top: 5px; }
+        .chat-box { height: 200px; overflow-y: auto; background: #000; padding: 10px; border: 1px solid #30363d; margin-bottom: 10px; }
+        .bar-bg { background: #333; height: 20px; border-radius: 3px; position: relative; margin-top: 5px;}
+        .bar-fill { background: #f87171; height: 100%; width: 100%; transition: width 0.1s; }
+    </style>
+</head>
+<body>
+
+    <!-- Left: Player Stats & Guild -->
+    <div class="panel">
+        <h2 id="p-name">Loading...</h2>
+        <p>Shards: <span id="p-shards">0</span></p>
+        <p>HP: <span id="p-hp">0</span>/500</p>
+        
+        <h3>Inventory</h3>
+        <div id="p-inv" style="font-size: 0.8rem; margin-bottom: 15px;"></div>
+
+        <h3>Guild Action</h3>
+        <button class="btn" onclick="donate()">Donate 50 Shards to Vault</button>
+    </div>
+
+    <!-- Center: Raid Combat -->
+    <div class="panel" style="width: 400px;">
+        <h2>Active Raid: Rootkit Overlord</h2>
+        <button class="btn" id="btn-join" onclick="joinRaid()">Engage Boss</button>
+        
+        <div style="margin-top: 20px;">
+            Boss HP: <span id="boss-hp-txt">10000/10000</span>
+            <div class="bar-bg"><div class="bar-fill" id="boss-hp-bar"></div></div>
+            <p style="color:#7d8590; font-size: 0.8rem;">Active Hackers in Raid: <span id="raid-count">0</span></p>
+        </div>
+    </div>
+
+    <!-- Right: Chat & Trade Logs -->
+    <div class="panel">
+        <h2>Global Network</h2>
+        <div class="chat-box" id="chat"></div>
+        <input type="text" id="chat-input" placeholder="Broadcast message..." style="width: 100%; padding: 5px;">
+        
+        <div id="trade-zone" style="margin-top: 20px; display: none; background: #2d3748; padding: 10px;">
+            <h3 style="margin:0; font-size:1rem; color:#4a90e2">Trade Request</h3>
+            <p id="trade-desc" style="font-size: 0.8rem;"></p>
+            <button class="btn" onclick="acceptTrade()" style="background: #48bb78">Offer 1st Item & Lock</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let myState = {};
+        let activeTradeId = null;
+
+        // --- Core Updates ---
+        socket.on('stateUpdate', (state) => {
+            myState = state;
+            document.getElementById('p-name').innerText = state.name;
+            document.getElementById('p-shards').innerText = state.shards;
+            document.getElementById('p-hp').innerText = state.hp;
+            
+            // Render Inventory
+            document.getElementById('p-inv').innerHTML = state.inventory.map(i => 
+                `<div>- ${i.name} 
+                    <button onclick="proposeTrade(prompt('Enter Target Player ID'), '${i.uid}')" style="font-size:10px; background:#4a90e2; border:none; color:white;">Trade</button>
+                </div>`
+            ).join('');
+        });
+
+        // --- Raid Combat ---
+        function joinRaid() {
+            socket.emit('joinRaid', 'raid_1');
+            document.getElementById('btn-join').style.display = 'none';
+        }
+
+        socket.on('raidUpdate', (raidData) => {
+            const pct = (raidData.boss.hp / raidData.boss.maxHp) * 100;
+            document.getElementById('boss-hp-bar').style.width = Math.max(0, pct) + '%';
+            document.getElementById('boss-hp-txt').innerText = `${Math.max(0, raidData.boss.hp)}/${raidData.boss.maxHp}`;
+            document.getElementById('raid-count').innerText = raidData.activePlayers;
+        });
+
+        // --- Community ---
+        document.getElementById('chat-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter' && this.value) {
+                socket.emit('sendChat', this.value);
+                this.value = '';
+            }
+        });
+
+        socket.on('chatMessage', (sender, msg) => {
+            const chat = document.getElementById('chat');
+            chat.innerHTML += `<div><strong style="color:#ff4500">[${sender}]</strong> ${msg}</div>`;
+            chat.scrollTop = chat.scrollHeight;
+        });
+
+        function donate() { socket.emit('donateToGuild', 50); }
+
+        // --- Trading ---
+        function proposeTrade(targetId, myItemUid) {
+            if(targetId) socket.emit('startTrade', targetId, myItemUid);
+        }
+
+        socket.on('tradeRequest', (tradeId, senderName, item) => {
+            activeTradeId = tradeId;
+            document.getElementById('trade-zone').style.display = 'block';
+            document.getElementById('trade-desc').innerText = `${senderName} offers: ${item.name}.`;
+        });
+
+        function acceptTrade() {
+            // Hardcoded to offer the first item in inventory for prototype speed
+            socket.emit('offerTradeItem', activeTradeId, myState.inventory[0].uid);
+            socket.emit('lockTrade', activeTradeId);
+            document.getElementById('trade-zone').innerHTML = "<p>Trade locked. Waiting for partner...</p>";
+        }
+    </script>
+</body>
+</html>
